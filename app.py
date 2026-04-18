@@ -18,7 +18,7 @@ st.set_page_config(
 # S3 CONFIG 🔥
 # -----------------------------
 s3 = boto3.client("s3")
-BUCKET_NAME = "Aviation"   # 🔥 CHANGE THIS
+BUCKET_NAME = "aviation-delay-data"   # 🔥 CHANGE THIS
 
 def save_to_s3(payload):
     file_name = f"inputs/{uuid.uuid4()}.json"
