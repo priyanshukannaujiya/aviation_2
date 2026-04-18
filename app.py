@@ -15,43 +15,43 @@ st.set_page_config(
 )
 
 # -----------------------------
-# S3 CONFIG 🔥
+# S3 CONFIG
 # -----------------------------
 s3 = boto3.client("s3")
-BUCKET_NAME = "aviation-delay-data"   # 🔥 CHANGE THIS
+BUCKET_NAME = "aviation-delay-data"   # 🔥 change if needed
 
-def save_to_s3(payload):
+def save_to_s3(data):
     file_name = f"inputs/{uuid.uuid4()}.json"
+
     s3.put_object(
         Bucket=BUCKET_NAME,
         Key=file_name,
-        Body=json.dumps(payload)
+        Body=json.dumps(data),
+        ContentType="application/json"
     )
 
 def load_s3_data():
     data = []
 
-    response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+    paginator = s3.get_paginator('list_objects_v2')
 
-    if "Contents" in response:
-        for obj in response["Contents"]:
-            key = obj["Key"]
+    for page in paginator.paginate(Bucket=BUCKET_NAME, Prefix="inputs/"):
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                key = obj["Key"]
 
-            if not key.startswith("inputs/"):
-                continue
+                file = s3.get_object(Bucket=BUCKET_NAME, Key=key)
+                content = file["Body"].read().decode("utf-8")
 
-            file = s3.get_object(Bucket=BUCKET_NAME, Key=key)
-            content = file["Body"].read().decode("utf-8")
-
-            try:
-                data.append(json.loads(content))
-            except:
-                pass
+                try:
+                    data.append(json.loads(content))
+                except:
+                    pass
 
     return data
 
 # -----------------------------
-# CUSTOM CSS 🔥
+# CUSTOM CSS
 # -----------------------------
 st.markdown("""
 <style>
@@ -76,7 +76,7 @@ st.markdown("""
 # HEADER
 # -----------------------------
 st.markdown("<h1 style='text-align:center;'>✈️ Aviation Delay Intelligence</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>Real-time flight delay prediction using AI + Weather + MCP</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>AI-based flight delay prediction</p>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -127,9 +127,9 @@ with col8:
 st.divider()
 
 # -----------------------------
-# API URL 🔥 FIXED
+# API URL
 # -----------------------------
-API_URL = "http://13.60.199.165:8000/tool/delay-reason"   # 🔥 CHANGE IF YOUR IP IS DIFFERENT
+API_URL = "http://13.60.199.165:8000/tool/delay-reason"   # 🔥 update if needed
 
 # -----------------------------
 # BUTTON ACTION
@@ -140,41 +140,41 @@ if st.button("🚀 Analyze Flight Delay"):
         "origin": origin,
         "hour": hour,
 
-        # Weather Encoding
         "Weather_Rain": 1 if weather == "Rain" else 0,
         "Weather_Fog": 1 if weather == "Fog" else 0,
         "Weather_Thunderstorm": 1 if weather == "Thunderstorm" else 0,
 
-        # Traffic Encoding
         "Airport_Traffic_Medium": 1 if traffic == "Medium" else 0,
         "Airport_Traffic_Low": 1 if traffic == "Low" else 0
     }
 
-    # 🔥 SAVE USER INPUT TO S3
-    try:
-        save_to_s3(payload)
-    except Exception as e:
-        st.warning(f"S3 Save Failed: {e}")
-
     with st.spinner("Analyzing flight delay... ✈️"):
 
         try:
-            response = requests.post(API_URL, json=payload)
+            response = requests.post(API_URL, json=payload, timeout=10)
 
             if response.status_code == 200:
-                try:
-                    data = response.json()
-                except:
-                    st.error("❌ Invalid response from backend")
-                    st.text(response.text)
-                    st.stop()
+                data = response.json()
             else:
                 st.error(f"❌ Backend error: {response.status_code}")
                 st.text(response.text)
                 st.stop()
 
             # -----------------------------
-            # OUTPUT
+            # SAVE INPUT + OUTPUT TO S3 🔥
+            # -----------------------------
+            result_data = {
+                "input": payload,
+                "output": data
+            }
+
+            try:
+                save_to_s3(result_data)
+            except Exception as e:
+                st.warning(f"S3 Save Failed: {e}")
+
+            # -----------------------------
+            # OUTPUT DISPLAY
             # -----------------------------
             st.markdown("## 📊 Delay Insights")
 
@@ -200,23 +200,25 @@ if st.button("🚀 Analyze Flight Delay"):
             st.write(e)
 
 # -----------------------------
-# LOAD S3 DATA UI 🔥
+# LOAD S3 DATA
 # -----------------------------
 st.divider()
-st.markdown("## 📂 Past Flight Data (from S3)")
+st.markdown("## 📂 Past Flight Data")
 
-if st.button("📥 Load Past Data"):
-    try:
-        s3_data = load_s3_data()
+if st.button("📥 Load Data from S3"):
+    with st.spinner("Loading data from S3..."):
 
-        if s3_data:
-            df = pd.DataFrame(s3_data)
-            st.dataframe(df)
-        else:
-            st.warning("No data found in S3")
+        try:
+            s3_data = load_s3_data()
 
-    except Exception as e:
-        st.error(f"Error loading S3 data: {e}")
+            if s3_data:
+                df = pd.json_normalize(s3_data)
+                st.dataframe(df)
+            else:
+                st.warning("No data found")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # -----------------------------
 # FOOTER
