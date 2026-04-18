@@ -1,5 +1,9 @@
 import streamlit as st
 import requests
+import boto3
+import json
+import pandas as pd
+import uuid
 
 # -----------------------------
 # PAGE CONFIG
@@ -9,6 +13,42 @@ st.set_page_config(
     page_icon="✈️",
     layout="wide"
 )
+
+# -----------------------------
+# S3 CONFIG 🔥
+# -----------------------------
+s3 = boto3.client("s3")
+BUCKET_NAME = "Aviation"   # 🔥 CHANGE THIS
+
+def save_to_s3(payload):
+    file_name = f"inputs/{uuid.uuid4()}.json"
+    s3.put_object(
+        Bucket=BUCKET_NAME,
+        Key=file_name,
+        Body=json.dumps(payload)
+    )
+
+def load_s3_data():
+    data = []
+
+    response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+
+    if "Contents" in response:
+        for obj in response["Contents"]:
+            key = obj["Key"]
+
+            if not key.startswith("inputs/"):
+                continue
+
+            file = s3.get_object(Bucket=BUCKET_NAME, Key=key)
+            content = file["Body"].read().decode("utf-8")
+
+            try:
+                data.append(json.loads(content))
+            except:
+                pass
+
+    return data
 
 # -----------------------------
 # CUSTOM CSS 🔥
@@ -87,9 +127,9 @@ with col8:
 st.divider()
 
 # -----------------------------
-# API URL
+# API URL 🔥 FIXED
 # -----------------------------
-API_URL = "http://127.0.0.1:8000/tool/delay-reason"
+API_URL = "http://13.60.199.165:8000/tool/delay-reason"   # 🔥 CHANGE IF YOUR IP IS DIFFERENT
 
 # -----------------------------
 # BUTTON ACTION
@@ -110,12 +150,17 @@ if st.button("🚀 Analyze Flight Delay"):
         "Airport_Traffic_Low": 1 if traffic == "Low" else 0
     }
 
+    # 🔥 SAVE USER INPUT TO S3
+    try:
+        save_to_s3(payload)
+    except Exception as e:
+        st.warning(f"S3 Save Failed: {e}")
+
     with st.spinner("Analyzing flight delay... ✈️"):
 
         try:
             response = requests.post(API_URL, json=payload)
 
-            # SAFE RESPONSE HANDLING
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -153,6 +198,25 @@ if st.button("🚀 Analyze Flight Delay"):
         except Exception as e:
             st.error("❌ Something went wrong")
             st.write(e)
+
+# -----------------------------
+# LOAD S3 DATA UI 🔥
+# -----------------------------
+st.divider()
+st.markdown("## 📂 Past Flight Data (from S3)")
+
+if st.button("📥 Load Past Data"):
+    try:
+        s3_data = load_s3_data()
+
+        if s3_data:
+            df = pd.DataFrame(s3_data)
+            st.dataframe(df)
+        else:
+            st.warning("No data found in S3")
+
+    except Exception as e:
+        st.error(f"Error loading S3 data: {e}")
 
 # -----------------------------
 # FOOTER
