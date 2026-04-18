@@ -2,6 +2,11 @@ from fastapi import FastAPI
 import pandas as pd
 import joblib
 from pydantic import BaseModel
+import boto3
+import json
+import uuid
+import datetime
+import os
 
 from services.mcp_engine import mcp_engine
 
@@ -71,6 +76,26 @@ def predict_flight_delay(input_data: FlightInput):
     if prediction < 0:
         prediction = 0
 
+    # Save result to S3
+    bucket_name = os.getenv("S3_BUCKET_NAME", "your-unique-s3-bucket-name")
+    try:
+        s3 = boto3.client('s3')
+        record = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "input_data": data,
+            "prediction_minutes": prediction,
+            "type": "prediction"
+        }
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=f"predictions/{record['id']}.json",
+            Body=json.dumps(record)
+        )
+        print(f"Successfully saved prediction to S3 bucket: {bucket_name}")
+    except Exception as e:
+        print(f"Failed to save prediction to S3: {e}")
+
     return {"prediction": prediction}
 
 
@@ -110,6 +135,26 @@ def delay_reason(input_data: FlightInput):
 
     if not reasons:
         reasons.append("Normal operating conditions")
+
+    # Save reasons result to S3
+    bucket_name = os.getenv("S3_BUCKET_NAME", "your-unique-s3-bucket-name")
+    try:
+        s3 = boto3.client('s3')
+        record = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "input_data": data,
+            "reasons": reasons,
+            "type": "reason"
+        }
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=f"reasons/{record['id']}.json",
+            Body=json.dumps(record)
+        )
+        print(f"Successfully saved reason to S3 bucket: {bucket_name}")
+    except Exception as e:
+        print(f"Failed to save reason to S3: {e}")
 
     return {"reasons": reasons}
 
