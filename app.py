@@ -129,7 +129,7 @@ st.divider()
 # -----------------------------
 # API URL
 # -----------------------------
-API_URL = "http://13.60.199.165:8000/tool/delay-reason"   # 🔥 update if needed
+API_URL = "http://127.0.0.1:8000/tool/delay-reason"   # 🔥 update if needed
 
 # -----------------------------
 # BUTTON ACTION
